@@ -4,7 +4,7 @@ html , based persistent indexeddb note maker
 ---
 ## Persistent indexed db based notes app!
 
-### Quick note: though I have added encryption feature use  at your own risk for sensitive info review the code fully, properly, You can freely modify the code use it , publish it just fork.
+### Quick note: though I have added encryption feature use  at your own risk for sensitive info review the code fully, properly, You can freely modify the code use it , publish it just fork.SOME PARTS ARE VIBE CODED.
 
 # Features
 
@@ -56,4 +56,18 @@ TRI_AREA 10 6
 Q3 1 2 3 4 5 6 7 8
 IQR 1 2 3 4 5 6 7 8
 
+-GCD 24 36
+LCM 6 8
+PRIME 29
+PRIME 15
+
+-FACT 5
+PERM 5 2
+COMB 5 2
+
+
+
+## Fixes planned
+
+- Quartiles function dont work give invalid 
 

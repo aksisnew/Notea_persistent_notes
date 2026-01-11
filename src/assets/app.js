@@ -220,7 +220,67 @@
   })();
 
   return q3 - q1;
+},
+'FACT': (args) => {
+  const n = Math.floor(args[0] || 0);
+  if (n < 0) return 0;
+  let r = 1;
+  for (let i = 2; i <= n; i++) r *= i;
+  return r;
+},
+
+'PERM': (args) => {
+  const n = Math.floor(args[0] || 0);
+  const r = Math.floor(args[1] || 0);
+  if (n < 0 || r < 0 || r > n) return 0;
+  let res = 1;
+  for (let i = n; i > n - r; i--) res *= i;
+  return res;
+},
+
+'COMB': (args) => {
+  const n = Math.floor(args[0] || 0);
+  const r = Math.floor(args[1] || 0);
+  if (n < 0 || r < 0 || r > n) return 0;
+  let num = 1, den = 1;
+  for (let i = 1; i <= r; i++) {
+    num *= (n - r + i);
+    den *= i;
+  }
+  return num / den;
+},
+'GCD': (args) => {
+  let a = Math.abs(args[0] || 0);
+  let b = Math.abs(args[1] || 0);
+  while (b !== 0) {
+    [a, b] = [b, a % b];
+  }
+  return a;
+},
+
+'LCM': (args) => {
+  const a = Math.abs(args[0] || 0);
+  const b = Math.abs(args[1] || 0);
+  if (a === 0 || b === 0) return 0;
+  const gcd = ((x, y) => {
+    while (y !== 0) [x, y] = [y, x % y];
+    return x;
+  })(a, b);
+  return (a * b) / gcd;
+},
+
+'PRIME': (args) => {
+  const n = Math.floor(args[0] || 0);
+  if (n <= 1) return false;
+  if (n <= 3) return true;
+  if (n % 2 === 0 || n % 3 === 0) return false;
+  for (let i = 5; i * i <= n; i += 6) {
+    if (n % i === 0 || n % (i + 2) === 0) return false;
+  }
+  return true;
 }
+
+
 
 
 
