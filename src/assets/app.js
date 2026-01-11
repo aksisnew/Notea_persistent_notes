@@ -1,6 +1,4 @@
-    /* =========================================
-       1. STATE & CONSTANTS
-       ========================================= */
+
     const DB_NAME = 'NotepadDB';
     const DB_VERSION = 1;
     let db;
@@ -15,9 +13,6 @@
     
     let searchState = { active: false, query: '', matches: [], currentIndex: -1, timer: null };
 
-    /* =========================================
-       2. INDEXED DB CORE
-       ========================================= */
     function initDB() {
         return new Promise((resolve, reject) => {
             const req = indexedDB.open(DB_NAME, DB_VERSION);
@@ -56,9 +51,6 @@
         return dbOp('readwrite', s => s.put(file));
     }
 
-    /* =========================================
-       3. STARTUP
-       ========================================= */
     window.onload = async () => {
         try {
             await initDB();
@@ -75,9 +67,6 @@
         } catch(e) { console.error("Init failed", e); }
     };
 
-    /* =========================================
-       4. FILE TREE
-       ========================================= */
     async function renderFileTree() {
         const files = await getAllFiles();
         const container = document.getElementById('file-tree');
@@ -146,9 +135,6 @@
     
     function resetTreeSelection() { currentFolderId = 0; renderFileTree(); }
 
-    /* =========================================
-       5. CRUD & CLIPBOARD
-       ========================================= */
     async function createNewFile(parentId = 0) {
         const name = prompt("New File Name:", "Untitled");
         if(!name) return;
@@ -258,9 +244,6 @@
         }
     }
 
-    /* =========================================
-       6. EDITOR & CORE UI
-       ========================================= */
     async function loadFile(id) {
         const file = await getFile(id);
         if (!file || file.isFolder) return;
@@ -364,7 +347,6 @@
         document.execCommand('insertHTML', false, html);
     }
 
-    /* --- RIGHT SIDEBAR & IMAGE OPTIMIZER --- */
     function toggleRightSidebar() {
         document.getElementById('right-sidebar').classList.toggle('open');
     }
@@ -432,7 +414,6 @@
         handleEditorInput();
     }
 
-    /* --- ORIGINAL IMAGE UPLOAD (Uncompressed) --- */
     function triggerImageUpload() {
         saveSelectionState();
         document.getElementById('img-upload-input').click();
