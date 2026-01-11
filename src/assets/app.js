@@ -32,7 +32,32 @@
         'UPPER': (str) => str.toUpperCase(),
         'LOWER': (str) => str.toLowerCase(),
         'LEN': (str) => str.length,
-        'NOW': () => new Date().toLocaleString()
+        'NOW': () => new Date().toLocaleString(),
+        'ABS': (args) => Math.abs(args[0]),
+'ROUND': (args) => Math.round(args[0]),
+'FLOOR': (args) => Math.floor(args[0]),
+'CEIL': (args) => Math.ceil(args[0]),
+'RAND': () => Math.random(),
+'RANDINT': (args) => {
+  const min = args[0] || 0;
+  const max = args[1] || 100;
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+},
+'TRIM': (str) => str.trim(),
+'REVERSE': (str) => str.split('').reverse().join(''),
+'WORDS': (str) => str.trim().split(/\s+/).length,
+'CHARS': (str) => str.length,
+'REPEAT': (args) => args[0].repeat(args[1] || 1),
+'TODAY': () => new Date().toDateString(),
+'TIME': () => new Date().toLocaleTimeString(),
+'YEAR': () => new Date().getFullYear(),
+'ADD_DAYS': (args) => {
+  const d = new Date();
+  d.setDate(d.getDate() + (args[0] || 0));
+  return d.toDateString();
+},
+
+
     };
 
     // --- DB MANAGEMENT HELPERS ---
