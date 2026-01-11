@@ -13,7 +13,7 @@ html , based persistent indexeddb note maker
 -
 
 
-## Formulas
+## Formulas / commands
 
 - TODAY
 TIME
@@ -28,4 +28,16 @@ REPEAT hi 5
 ROUND 3.6
 RAND
 RANDINT 10 50
+
+- MEAN 1 2 3 4 5
+MEDIAN 1 3 3 6 7 8 9
+MODE 1 2 2 3 4
+RANGE 5 10 20
+VARIANCE 2 4 6 8
+STDDEV 2 4 6 8
+SUMSQ 1 2 3
+PROD 2 3 4
+PERCENT 25 200
+NORM 5 0 10
+
 

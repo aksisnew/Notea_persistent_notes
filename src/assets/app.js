@@ -56,6 +56,77 @@
   d.setDate(d.getDate() + (args[0] || 0));
   return d.toDateString();
 },
+'MEAN': (args) => {
+  if (!args.length) return 0;
+  return args.reduce((a, b) => a + b, 0) / args.length;
+},
+
+'MEDIAN': (args) => {
+  if (!args.length) return 0;
+  const nums = [...args].sort((a, b) => a - b);
+  const mid = Math.floor(nums.length / 2);
+  return nums.length % 2 !== 0
+    ? nums[mid]
+    : (nums[mid - 1] + nums[mid]) / 2;
+},
+
+'MODE': (args) => {
+  if (!args.length) return 0;
+  const freq = {};
+  let maxFreq = 0;
+  let mode = args[0];
+
+  args.forEach(n => {
+    freq[n] = (freq[n] || 0) + 1;
+    if (freq[n] > maxFreq) {
+      maxFreq = freq[n];
+      mode = n;
+    }
+  });
+  return mode;
+},
+
+'RANGE': (args) => {
+  if (!args.length) return 0;
+  return Math.max(...args) - Math.min(...args);
+},
+
+'VARIANCE': (args) => {
+  if (!args.length) return 0;
+  const mean = args.reduce((a, b) => a + b, 0) / args.length;
+  return args.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / args.length;
+},
+
+'STDDEV': (args) => {
+  if (!args.length) return 0;
+  const mean = args.reduce((a, b) => a + b, 0) / args.length;
+  const variance = args.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / args.length;
+  return Math.sqrt(variance);
+},
+
+'SUMSQ': (args) => {
+  return args.reduce((a, b) => a + (b * b), 0);
+},
+
+'PROD': (args) => {
+  if (!args.length) return 0;
+  return args.reduce((a, b) => a * b, 1);
+},
+
+'PERCENT': (args) => {
+  const value = args[0] || 0;
+  const total = args[1] || 1;
+  return (value / total) * 100;
+},
+
+'NORM': (args) => {
+  const value = args[0] || 0;
+  const min = args[1] || 0;
+  const max = args[2] || 1;
+  if (max === min) return 0;
+  return (value - min) / (max - min);
+}
+
 
 
     };
