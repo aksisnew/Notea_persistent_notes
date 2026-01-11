@@ -1,9 +1,7 @@
 // --- DATABASE STATE MANAGEMENT ---
-    // Initialize DB List if empty
     if (!localStorage.getItem('db_list')) {
         localStorage.setItem('db_list', JSON.stringify(['NotepadDB']));
     }
-    // Get current active DB or default
     let DB_NAME = localStorage.getItem('active_db_name') || 'NotepadDB';
     const DB_VERSION = 1;
     let db;
@@ -12,11 +10,30 @@
     let saveTimeout;
     let lastSavedSelection = null; 
     
+    // Tab State
+    let openTabs = []; 
+    
+    // Undo/Redo State (Per File)
+    let fileHistory = {}; // { fileId: { past: [], future: [] } }
+    
     let clipboard = { id: null, mode: null, isFolder: false, name: '' };
     const CONFIG = { historyEnabled: true };
     const expandedFolders = new Set();
     
     let searchState = { active: false, query: '', matches: [], currentIndex: -1, timer: null };
+
+    // --- FUNCTION BAR REGISTRY ---
+    const CMD_REGISTRY = {
+        'SUM': (args) => args.reduce((a, b) => a + b, 0),
+        'AVG': (args) => args.length ? args.reduce((a, b) => a + b, 0) / args.length : 0,
+        'MIN': (args) => Math.min(...args),
+        'MAX': (args) => Math.max(...args),
+        'COUNT': (args) => args.length,
+        'UPPER': (str) => str.toUpperCase(),
+        'LOWER': (str) => str.toLowerCase(),
+        'LEN': (str) => str.length,
+        'NOW': () => new Date().toLocaleString()
+    };
 
     // --- DB MANAGEMENT HELPERS ---
     function getDBList() {
@@ -38,21 +55,17 @@
     function deleteDatabaseByName(name) {
         if (!confirm(`Are you sure you want to delete database "${name}" permanently?`)) return;
         
-        // Remove from LS list
         let list = getDBList();
         list = list.filter(n => n !== name);
-        if (list.length === 0) list.push('NotepadDB'); // Ensure at least one exists
+        if (list.length === 0) list.push('NotepadDB');
         localStorage.setItem('db_list', JSON.stringify(list));
 
-        // Delete actual IndexedDB
         const req = indexedDB.deleteDatabase(name);
         
         req.onsuccess = () => {
-            // If we deleted the active one, switch to the first available
             if (name === DB_NAME) {
                 switchDatabase(list[0]);
             } else {
-                // Just re-render settings if we deleted an inactive one
                 renderDBSettings(); 
             }
         };
@@ -61,8 +74,9 @@
 
     function switchDatabase(name) {
         localStorage.setItem('active_db_name', name);
-        localStorage.removeItem('last_open_file'); // Reset open file for new DB
-        location.reload(); // Reload page to init new DB cleanly
+        localStorage.removeItem('last_open_file'); 
+        localStorage.removeItem('open_tabs'); 
+        location.reload(); 
     }
 
     // --- CORE DB FUNCTIONS ---
@@ -107,13 +121,26 @@
     window.onload = async () => {
         try {
             await initDB();
+            initTabSystem(); 
+            initActionBar(); // NEW: Inject Undo/Redo & Func Bar
             loadSettings();
             await renderFileTree();
+            
+            const storedTabs = localStorage.getItem('open_tabs');
+            if (storedTabs) {
+                openTabs = JSON.parse(storedTabs);
+                renderTabs();
+            }
+
             const lastId = localStorage.getItem('last_open_file');
-            if(lastId) loadFile(lastId);
+            if(lastId) {
+                const file = await getFile(lastId);
+                if(file) loadFile(lastId);
+                else if(openTabs.length > 0) loadFile(openTabs[0].id);
+            }
+
             if(CONFIG.historyEnabled) pruneHistory();
             
-            // Image Optimizer Listeners
             const qualityInput = document.getElementById('opt-quality');
             if(qualityInput) {
                 qualityInput.oninput = function() {
@@ -123,6 +150,245 @@
         } catch(e) { console.error("Init failed", e); }
     };
 
+    // --- NEW: ACTION BAR (UNDO/REDO + FUNCTIONS) ---
+    function initActionBar() {
+        const style = document.createElement('style');
+        style.innerHTML = `
+            #action-bar { display: flex; background: var(--bg-panel); border-bottom: 1px solid var(--border); height: 38px; align-items: center; padding: 0 10px; gap: 10px; }
+            .ab-group { display: flex; align-items: center; gap: 2px; border-right: 1px solid var(--border); padding-right: 8px; }
+            .ab-group:last-child { border: none; }
+            .func-box { flex: 1; display: flex; gap: 5px; align-items: center; }
+            #func-input { background: var(--bg-main); border: 1px solid var(--border); color: var(--text-main); border-radius: 4px; padding: 4px 8px; flex: 1; font-family: var(--font-mono); font-size: 0.85rem; }
+            #func-result { background: var(--bg-hover); color: var(--text-muted); padding: 4px 8px; border-radius: 4px; min-width: 60px; text-align: right; font-family: var(--font-mono); font-size: 0.85rem; overflow: hidden; white-space: nowrap; }
+            .calc-btn { font-size: 0.8rem; padding: 2px 8px; height: 28px; }
+        `;
+        document.head.appendChild(style);
+
+        const mainWrapper = document.getElementById('main-wrapper');
+        const toolbar = document.getElementById('editor-toolbar');
+        const actionBar = document.createElement('div');
+        actionBar.id = 'action-bar';
+        
+        actionBar.innerHTML = `
+            <div class="ab-group">
+                <button class="btn btn-icon" onclick="performUndo()" title="Undo (Ctrl+Z)">↩</button>
+                <button class="btn btn-icon" onclick="performRedo()" title="Redo (Ctrl+Y)">↪</button>
+            </div>
+            <div class="func-box">
+                <span style="font-weight:bold; color:var(--accent); font-family:serif; font-style:italic;">fx</span>
+                <input type="text" id="func-input" placeholder="e.g. SUM 4 + 6 or 10 * 5" onkeyup="if(event.key==='Enter') calculateExpression()">
+                <div id="func-result" title="Result Preview"></div>
+                <button class="btn calc-btn" onclick="calculateExpression()">Calculate</button>
+                <button class="btn calc-btn btn-primary" onclick="insertCalculation()">+ Add</button>
+            </div>
+        `;
+
+        if(mainWrapper && toolbar) {
+            mainWrapper.insertBefore(actionBar, toolbar);
+        }
+    }
+
+    // --- UNDO/REDO LOGIC ---
+    function snapshotHistory(id, content) {
+        if(!id) return;
+        if(!fileHistory[id]) fileHistory[id] = { past: [], future: [] };
+        
+        const h = fileHistory[id];
+        // Don't push if same as last
+        if(h.past.length > 0 && h.past[h.past.length - 1] === content) return;
+        
+        h.past.push(content);
+        if(h.past.length > 50) h.past.shift(); // Limit limit
+        h.future = []; // Clear future on new change
+    }
+
+    function performUndo() {
+        if(!currentFileId || !fileHistory[currentFileId]) return;
+        const h = fileHistory[currentFileId];
+        if(h.past.length < 2) return; // Need at least current state and one previous
+
+        const current = h.past.pop();
+        h.future.push(current);
+        
+        const previous = h.past[h.past.length - 1];
+        document.getElementById('editor').innerHTML = previous;
+        
+        // Prevent auto-save loop triggering new snapshot
+        isUndoing = true;
+        handleEditorInput(true); // true = skip snapshot
+        isUndoing = false;
+    }
+
+    function performRedo() {
+        if(!currentFileId || !fileHistory[currentFileId]) return;
+        const h = fileHistory[currentFileId];
+        if(h.future.length === 0) return;
+
+        const next = h.future.pop();
+        h.past.push(next);
+        document.getElementById('editor').innerHTML = next;
+
+        isUndoing = true;
+        handleEditorInput(true);
+        isUndoing = false;
+    }
+
+    // --- FUNCTION BAR LOGIC ---
+    function calculateExpression() {
+        const input = document.getElementById('func-input').value.trim();
+        const resBox = document.getElementById('func-result');
+        
+        if(!input) { resBox.innerText = ""; return; }
+
+        let result = "Error";
+        try {
+            // Check for Command Format (CMD Arg1 Arg2...)
+            const parts = input.split(/\s+|(?=[+*/()-])/).filter(x => x.trim() !== ''); // Basic tokenizer
+            const cmd = parts[0].toUpperCase();
+
+            if (CMD_REGISTRY[cmd]) {
+                // It's a registered command
+                // Extract args. If math, convert to numbers. If string, join remainder.
+                const rawArgs = input.substring(cmd.length).trim();
+                
+                // Heuristic: Try to match numbers
+                const numArgs = rawArgs.match(/-?\d+(\.\d+)?/g);
+                
+                if (['UPPER', 'LOWER', 'LEN'].includes(cmd)) {
+                   result = CMD_REGISTRY[cmd](rawArgs);
+                } else if(numArgs) {
+                   const nums = numArgs.map(Number);
+                   result = CMD_REGISTRY[cmd](nums);
+                } else {
+                   result = CMD_REGISTRY[cmd](rawArgs); // Fallback
+                }
+            } else {
+                // Try Basic Math Evaluation
+                // Security: Don't use raw eval. Use Function constructor with strict limits or regex validation
+                if (/^[\d\s+\-*/.()]+$/.test(input)) {
+                    // Safe math string
+                    result = new Function('return ' + input)();
+                } else {
+                    result = "Invalid";
+                }
+            }
+        } catch (e) {
+            result = "Err";
+        }
+        
+        // Round to 4 decimal places if number
+        if(typeof result === 'number' && !Number.isInteger(result)) result = result.toFixed(4);
+        
+        resBox.innerText = result;
+        resBox.setAttribute('data-val', result);
+    }
+
+    function insertCalculation() {
+        const resBox = document.getElementById('func-result');
+        const val = resBox.innerText;
+        if(!val || val === "Error") return;
+        
+        const editor = document.getElementById('editor');
+        editor.focus();
+        
+        // Insert at cursor
+        if (!document.execCommand('insertText', false, val)) {
+            editor.innerHTML += val;
+        }
+        
+        handleEditorInput();
+    }
+
+    // --- TAB SYSTEM LOGIC & UI ---
+    function initTabSystem() {
+        const style = document.createElement('style');
+        style.innerHTML = `
+            #tab-strip { display: flex; background: var(--bg-main); border-bottom: 1px solid var(--border); overflow-x: auto; flex-shrink: 0; height: 35px; align-items: flex-end; }
+            #tab-strip::-webkit-scrollbar { height: 4px; }
+            .tab { 
+                padding: 6px 12px; border-right: 1px solid var(--border); cursor: pointer; display: flex; align-items: center; gap: 8px; 
+                min-width: 120px; max-width: 200px; user-select: none; color: var(--text-muted); background: var(--bg-panel); height: 100%; font-size: 0.85rem;
+                transition: background 0.1s;
+            }
+            .tab:hover { background: var(--bg-hover); }
+            .tab.active { background: var(--bg-main); color: var(--text-main); border-top: 2px solid var(--accent); border-bottom: 1px solid var(--bg-main); font-weight: 500; }
+            .tab-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
+            .tab-close { opacity: 0.6; font-size: 14px; padding: 0 4px; border-radius: 4px; line-height: 1; }
+            .tab-close:hover { opacity: 1; background: var(--danger); color: white; }
+            .tab-add-btn { width: 35px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text-muted); height: 100%; border-right: 1px solid var(--border); }
+            .tab-add-btn:hover { background: var(--bg-hover); color: var(--text-main); }
+        `;
+        document.head.appendChild(style);
+
+        const mainWrapper = document.getElementById('main-wrapper');
+        const toolbar = document.getElementById('editor-toolbar');
+        const tabStrip = document.createElement('div');
+        tabStrip.id = 'tab-strip';
+        if(mainWrapper && toolbar) {
+            mainWrapper.insertBefore(tabStrip, toolbar);
+        }
+        renderTabs();
+    }
+
+    function renderTabs() {
+        const strip = document.getElementById('tab-strip');
+        if(!strip) return;
+        strip.innerHTML = '';
+
+        openTabs.forEach(tab => {
+            const div = document.createElement('div');
+            div.className = `tab ${currentFileId == tab.id ? 'active' : ''}`;
+            div.onclick = () => loadFile(tab.id);
+            div.title = tab.name;
+            div.onmouseup = (e) => { if(e.button === 1) closeTab(e, tab.id); };
+
+            div.innerHTML = `
+                <span class="tab-name">${tab.name}</span>
+                <span class="tab-close" onclick="closeTab(event, ${tab.id})">×</span>
+            `;
+            strip.appendChild(div);
+            
+            if(currentFileId == tab.id) {
+                div.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+            }
+        });
+
+        const addBtn = document.createElement('div');
+        addBtn.className = 'tab-add-btn';
+        addBtn.innerHTML = '+';
+        addBtn.title = "New File";
+        addBtn.onclick = () => createNewFile(currentFolderId);
+        strip.appendChild(addBtn);
+
+        localStorage.setItem('open_tabs', JSON.stringify(openTabs));
+    }
+
+    function closeTab(e, id) {
+        if(e) e.stopPropagation();
+        const index = openTabs.findIndex(t => t.id == id);
+        if(index === -1) return;
+        
+        openTabs.splice(index, 1);
+        // Clear history for closed tab to save memory
+        if(fileHistory[id]) delete fileHistory[id];
+        
+        if (id == currentFileId) {
+            if (openTabs.length > 0) {
+                const newIndex = Math.max(0, index - 1);
+                loadFile(openTabs[newIndex].id);
+            } else {
+                currentFileId = null;
+                document.getElementById('editor').innerHTML = "";
+                document.getElementById('encrypt-btn').classList.add('hidden');
+                localStorage.removeItem('last_open_file');
+                renderFileTree();
+                updateStatusBar();
+            }
+        }
+        renderTabs();
+    }
+
+    // --- FILE SYSTEM ---
     async function renderFileTree() {
         const files = await getAllFiles();
         const container = document.getElementById('file-tree');
@@ -229,7 +495,13 @@
         closeModal();
         const file = await getFile(id);
         const name = prompt("Rename:", file.name);
-        if(name) { file.name = name; await saveFileRecord(file); renderFileTree(); }
+        if(name && name !== file.name) { 
+            file.name = name; 
+            await saveFileRecord(file); 
+            const tab = openTabs.find(t => t.id == id);
+            if(tab) { tab.name = name; renderTabs(); }
+            renderFileTree(); 
+        }
     }
 
     async function deleteItem(id) {
@@ -240,13 +512,9 @@
             const children = files.filter(f => f.parentId == tid);
             for(let c of children) await del(c.id);
             await deleteFileRecord(tid);
+            if (openTabs.find(t => t.id == tid)) closeTab(null, tid);
         }
         await del(id);
-        if(currentFileId == id) { 
-            document.getElementById('editor').innerHTML = ""; 
-            currentFileId = null; 
-            updateStatusBar();
-        }
         renderFileTree();
     }
 
@@ -302,10 +570,18 @@
 
     async function loadFile(id) {
         const file = await getFile(id);
-        if (!file || file.isFolder) return;
+        if (!file || file.isFolder) {
+            if(!file && openTabs.find(t => t.id == id)) closeTab(null, id);
+            return;
+        }
 
         currentFileId = id;
         localStorage.setItem('last_open_file', id);
+        
+        if(!openTabs.find(t => t.id == id)) {
+            openTabs.push({ id: id, name: file.name });
+        }
+        
         closeFindBar();
         
         const editor = document.getElementById('editor');
@@ -320,28 +596,34 @@
             editor.contentEditable = "true";
             editor.innerHTML = file.content || "";
             encBtn.innerText = "🔒 Encrypt";
+            // Initialize history snapshot for this file if empty
+            if(!fileHistory[id]) snapshotHistory(id, file.content || "");
         }
-        renderFileTree();
+        
+        renderTabs(); 
+        renderFileTree(); 
         updateStatusBar();
     }
 
-    function handleEditorInput() {
+    let isUndoing = false;
+    function handleEditorInput(skipSnapshot = false) {
         updateStatusBar();
         if(!currentFileId) return;
         document.getElementById('save-status').innerText = "Saving...";
         clearTimeout(saveTimeout);
         saveTimeout = setTimeout(async () => {
             const file = await getFile(currentFileId);
-            if(file.isEncrypted) return;
+            if(file && !file.isEncrypted) {
+                let content = document.getElementById('editor').innerHTML;
+                content = content.replace(/<span class="search-hit[^>]*>(.*?)<\/span>/g, '$1');
 
-            // STRIP SEARCH HIGHLIGHTS
-            let content = document.getElementById('editor').innerHTML;
-            content = content.replace(/<span class="search-hit[^>]*>(.*?)<\/span>/g, '$1');
-
-            file.content = content;
-            await saveFileRecord(file);
-            document.getElementById('save-status').innerText = "Saved";
-            if(CONFIG.historyEnabled) logHistory(currentFileId, file.content);
+                file.content = content;
+                await saveFileRecord(file);
+                document.getElementById('save-status').innerText = "Saved";
+                
+                if(CONFIG.historyEnabled) logHistory(currentFileId, file.content);
+                if(!skipSnapshot && !isUndoing) snapshotHistory(currentFileId, content);
+            }
         }, 800);
     }
 
@@ -443,8 +725,6 @@
 
                 const compressedBase64 = canvas.toDataURL(file.type === 'image/png' ? 'image/png' : 'image/jpeg', quality);
                 insertImageAtCursor(compressedBase64);
-                
-                // Clear input
                 input.value = '';
             }
         };
@@ -455,7 +735,6 @@
         const editor = document.getElementById('editor');
         editor.focus();
         
-        // Restore selection if saved
         if (lastSavedSelection) {
             const sel = window.getSelection();
             sel.removeAllRanges();
@@ -492,7 +771,6 @@
         const charCount = text.length;
         const wordCount = text.trim() === "" ? 0 : text.trim().split(/\s+/).length;
         
-        // Estimate Size
         const bytes = new Blob([html]).size;
         let sizeStr = bytes + " B";
         if(bytes > 1024) sizeStr = (bytes/1024).toFixed(1) + " KB";
@@ -685,7 +963,6 @@
     async function openSettings() {
         const modalBody = document.querySelector('#settings-modal .modal-body');
         
-        // Inject Container if missing
         if(!document.getElementById('db-settings-container')) {
             const hr = modalBody.querySelector('hr');
             const container = document.createElement('div');
@@ -695,17 +972,13 @@
             container.style.borderTop = '1px solid var(--border)';
             container.style.paddingTop = '10px';
             
-            // Insert before the last HR or append
             if(hr) modalBody.insertBefore(container, hr);
             else modalBody.appendChild(container);
         }
 
         document.getElementById('settings-modal').style.display = 'flex';
-        
-        // Render DB UI
         renderDBSettings();
 
-        // Standard Storage Calc
         const txt = document.getElementById('storage-usage-text');
         const bar = document.getElementById('storage-bar');
         if (navigator.storage && navigator.storage.estimate) {
@@ -723,7 +996,6 @@
         
         const list = getDBList();
         
-        // List Databases
         list.forEach(dbName => {
             const row = document.createElement('div');
             row.className = 'flex-between';
@@ -765,7 +1037,6 @@
             container.appendChild(row);
         });
 
-        // Add New DB Section
         const newDiv = document.createElement('div');
         newDiv.style.marginTop = '10px';
         newDiv.style.display = 'flex';
