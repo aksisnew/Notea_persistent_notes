@@ -1,5 +1,10 @@
-
-    const DB_NAME = 'NotepadDB';
+// --- DATABASE STATE MANAGEMENT ---
+    // Initialize DB List if empty
+    if (!localStorage.getItem('db_list')) {
+        localStorage.setItem('db_list', JSON.stringify(['NotepadDB']));
+    }
+    // Get current active DB or default
+    let DB_NAME = localStorage.getItem('active_db_name') || 'NotepadDB';
     const DB_VERSION = 1;
     let db;
     let currentFileId = null;
@@ -13,6 +18,54 @@
     
     let searchState = { active: false, query: '', matches: [], currentIndex: -1, timer: null };
 
+    // --- DB MANAGEMENT HELPERS ---
+    function getDBList() {
+        return JSON.parse(localStorage.getItem('db_list') || "['NotepadDB']");
+    }
+
+    function createNewDatabase(name) {
+        if (!name) return;
+        let list = getDBList();
+        if (list.includes(name)) {
+            alert("Database already exists!");
+            return;
+        }
+        list.push(name);
+        localStorage.setItem('db_list', JSON.stringify(list));
+        switchDatabase(name);
+    }
+
+    function deleteDatabaseByName(name) {
+        if (!confirm(`Are you sure you want to delete database "${name}" permanently?`)) return;
+        
+        // Remove from LS list
+        let list = getDBList();
+        list = list.filter(n => n !== name);
+        if (list.length === 0) list.push('NotepadDB'); // Ensure at least one exists
+        localStorage.setItem('db_list', JSON.stringify(list));
+
+        // Delete actual IndexedDB
+        const req = indexedDB.deleteDatabase(name);
+        
+        req.onsuccess = () => {
+            // If we deleted the active one, switch to the first available
+            if (name === DB_NAME) {
+                switchDatabase(list[0]);
+            } else {
+                // Just re-render settings if we deleted an inactive one
+                renderDBSettings(); 
+            }
+        };
+        req.onerror = () => alert("Error deleting database.");
+    }
+
+    function switchDatabase(name) {
+        localStorage.setItem('active_db_name', name);
+        localStorage.removeItem('last_open_file'); // Reset open file for new DB
+        location.reload(); // Reload page to init new DB cleanly
+    }
+
+    // --- CORE DB FUNCTIONS ---
     function initDB() {
         return new Promise((resolve, reject) => {
             const req = indexedDB.open(DB_NAME, DB_VERSION);
@@ -61,9 +114,12 @@
             if(CONFIG.historyEnabled) pruneHistory();
             
             // Image Optimizer Listeners
-            document.getElementById('opt-quality').oninput = function() {
-                document.getElementById('opt-qual-val').innerText = this.value;
-            };
+            const qualityInput = document.getElementById('opt-quality');
+            if(qualityInput) {
+                qualityInput.oninput = function() {
+                    document.getElementById('opt-qual-val').innerText = this.value;
+                };
+            }
         } catch(e) { console.error("Init failed", e); }
     };
 
@@ -588,7 +644,7 @@
         localStorage.setItem('notepad_config', JSON.stringify(CONFIG));
     }
     async function clearDatabase() {
-        if(!confirm("⚠️ DELETE ALL DATA?")) return;
+        if(!confirm("⚠️ DELETE CURRENT DATABASE DATA?")) return;
         db.close();
         indexedDB.deleteDatabase(DB_NAME).onsuccess = () => location.reload();
     }
@@ -624,8 +680,32 @@
             renderFileTree();
         }; r.readAsText(f);
     }
+    
+    // --- DB MANAGEMENT UI INJECTION ---
     async function openSettings() {
+        const modalBody = document.querySelector('#settings-modal .modal-body');
+        
+        // Inject Container if missing
+        if(!document.getElementById('db-settings-container')) {
+            const hr = modalBody.querySelector('hr');
+            const container = document.createElement('div');
+            container.id = 'db-settings-container';
+            container.style.marginTop = '15px';
+            container.style.marginBottom = '15px';
+            container.style.borderTop = '1px solid var(--border)';
+            container.style.paddingTop = '10px';
+            
+            // Insert before the last HR or append
+            if(hr) modalBody.insertBefore(container, hr);
+            else modalBody.appendChild(container);
+        }
+
         document.getElementById('settings-modal').style.display = 'flex';
+        
+        // Render DB UI
+        renderDBSettings();
+
+        // Standard Storage Calc
         const txt = document.getElementById('storage-usage-text');
         const bar = document.getElementById('storage-bar');
         if (navigator.storage && navigator.storage.estimate) {
@@ -635,6 +715,79 @@
             txt.innerText = `${u} MB used`; bar.style.width = (p<1?1:p)+"%";
         } else txt.innerText = "Not supported";
     }
+
+    function renderDBSettings() {
+        const container = document.getElementById('db-settings-container');
+        if(!container) return;
+        container.innerHTML = '<h4>Database Management</h4>';
+        
+        const list = getDBList();
+        
+        // List Databases
+        list.forEach(dbName => {
+            const row = document.createElement('div');
+            row.className = 'flex-between';
+            row.style.marginBottom = '5px';
+            row.style.padding = '8px';
+            row.style.border = '1px solid var(--border)';
+            row.style.borderRadius = '4px';
+            row.style.background = 'var(--bg-main)';
+            
+            const nameSpan = document.createElement('span');
+            nameSpan.innerText = dbName;
+            if(dbName === DB_NAME) {
+                nameSpan.style.color = 'var(--success)';
+                nameSpan.style.fontWeight = 'bold';
+                nameSpan.innerText += ' (Active)';
+            }
+            
+            const actions = document.createElement('div');
+            actions.style.display = 'flex';
+            actions.style.gap = '5px';
+
+            if(dbName !== DB_NAME) {
+                const switchBtn = document.createElement('button');
+                switchBtn.className = 'btn';
+                switchBtn.innerText = 'Switch';
+                switchBtn.onclick = () => switchDatabase(dbName);
+                actions.appendChild(switchBtn);
+
+                const delBtn = document.createElement('button');
+                delBtn.className = 'btn btn-danger';
+                delBtn.innerText = '✖';
+                delBtn.title = "Delete Database";
+                delBtn.onclick = () => deleteDatabaseByName(dbName);
+                actions.appendChild(delBtn);
+            }
+
+            row.appendChild(nameSpan);
+            row.appendChild(actions);
+            container.appendChild(row);
+        });
+
+        // Add New DB Section
+        const newDiv = document.createElement('div');
+        newDiv.style.marginTop = '10px';
+        newDiv.style.display = 'flex';
+        newDiv.style.gap = '5px';
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.placeholder = 'New DB Name...';
+        input.className = 'input-text';
+        input.style.flex = '1';
+
+        const createBtn = document.createElement('button');
+        createBtn.className = 'btn btn-primary';
+        createBtn.innerText = '+ Create';
+        createBtn.onclick = () => {
+            if(input.value.trim()) createNewDatabase(input.value.trim());
+        };
+
+        newDiv.appendChild(input);
+        newDiv.appendChild(createBtn);
+        container.appendChild(newDiv);
+    }
+
     function closeModal() { document.querySelectorAll('.modal-overlay').forEach(e=>e.style.display='none'); }
     window.onclick = e => { if(e.target.className.includes('modal-overlay')) closeModal(); };
-
