@@ -4,13 +4,13 @@ html , based persistent indexeddb note maker
 ---
 ## Persistent indexed db based notes app!
 
-### Quick note: though I have added encryption feature use  at your own risk for sensitive info review the code fully, properly, You can freely modify the code use it , publish it just fork.SOME PARTS ARE VIBE CODED.
+### Quick note: though I have added encryption feature use  at your own risk for sensitive info review the code fully, properly, You can freely modify the code use it , publish it just fork.SOME PARTS ARE VIBE CODED. No sponsorship by any ai company.Check code thuroghly before running
 
 # Features
 
 - Notes encryption with browser's webcrypto api
 - Base 64 encoded image adding capabilities
--
+- Formulas bar
 
 
 ## Formulas / commands
