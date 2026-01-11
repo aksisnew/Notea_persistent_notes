@@ -1,0 +1,202 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Secure NotePad Pro: Ultimate</title>
+    <link rel="stylesheet" href="./assets/app.css">
+</head>
+<body>
+
+<div id="app">
+    <!-- LEFT SIDEBAR -->
+    <div id="sidebar" class="sidebar">
+        <div class="sb-header">
+            <div class="sb-title">
+                <span>Notepad Pro</span>
+                <button class="btn btn-icon" onclick="openSettings()" title="Settings">⚙️</button>
+            </div>
+            <div class="sb-actions">
+                <button class="btn btn-primary" onclick="createNewFile(currentFolderId)" title="New File">+ File</button>
+                <button class="btn" onclick="createNewFolder(currentFolderId)" title="New Folder">+ Folder</button>
+                <label class="btn btn-icon" title="Upload File">
+                    ⬆️ <input type="file" id="file-upload" hidden onchange="handleFileUpload(this)">
+                </label>
+                <button class="btn btn-icon" onclick="resetTreeSelection()" title="Go to Root">🏠</button>
+            </div>
+            <input type="text" class="sb-search" id="search-box" placeholder="Search..." onkeyup="renderFileTree()">
+        </div>
+        
+        <!-- Clipboard Indicator -->
+        <div id="clipboard-bar">
+            <span id="clipboard-text">Item in clipboard</span>
+            <button class="btn btn-icon" style="padding:2px; height:20px; width:20px;" onclick="clearClipboard()">✕</button>
+        </div>
+
+        <div id="file-tree"></div>
+    </div>
+
+    <!-- MAIN EDITOR WRAPPER -->
+    <div id="main-wrapper">
+        <div id="editor-toolbar">
+            <!-- Styling -->
+            <div class="toolbar-group">
+                <button class="btn btn-icon" onclick="execCmd('bold')" title="Bold"><b>B</b></button>
+                <button class="btn btn-icon" onclick="execCmd('italic')" title="Italic"><i>I</i></button>
+                <button class="btn btn-icon" onclick="execCmd('underline')" title="Underline"><u>U</u></button>
+                <select class="btn" onchange="insertFontWeight(this.value); this.value=''" title="Font Weight">
+                    <option value="">Weight</option>
+                    <option value="300">Light</option>
+                    <option value="400">Normal</option>
+                    <option value="700">Bold</option>
+                    <option value="900">Heavy</option>
+                </select>
+            </div>
+            <!-- Format -->
+            <div class="toolbar-group">
+                <select class="btn" onchange="execCmd('formatBlock', this.value); this.value=''">
+                    <option value="">Header</option>
+                    <option value="H1">H1</option>
+                    <option value="H2">H2</option>
+                    <option value="P">Para</option>
+                    <option value="BLOCKQUOTE">Quote</option>
+                </select>
+                <select class="btn" onchange="execCmd('fontName', this.value); this.value=''">
+                    <option value="">Font</option>
+                    <option value="Arial">Arial</option>
+                    <option value="Courier New">Mono</option>
+                    <option value="Georgia">Serif</option>
+                </select>
+                <select class="btn" onchange="execCmd('fontSize', this.value); this.value=''">
+                    <option value="">Size</option>
+                    <option value="2">Small</option>
+                    <option value="3">Normal</option>
+                    <option value="5">Big</option>
+                </select>
+            </div>
+            <!-- Color -->
+            <div class="toolbar-group">
+                <input type="color" onchange="execCmd('foreColor', this.value)" title="Text Color" style="width:24px; height:24px; border:none; background:none; cursor:pointer">
+                <button class="btn btn-icon" onclick="execCmd('hiliteColor', '#facc15')" style="background:#facc15;color:#000;font-weight:bold;">H</button>
+            </div>
+            <!-- Media & Tools -->
+            <div class="toolbar-group">
+                <button class="btn btn-icon" onclick="insertCodeBlock()" title="Code Block">{'}</button>
+                <button class="btn btn-icon" onclick="execCmd('insertUnorderedList')">•List</button>
+                <button class="btn btn-icon" onclick="triggerImageUpload()" title="Original Image">🖼️</button>
+                <button class="btn btn-icon" onclick="insertTable()" title="Insert Table">▦</button>
+                <button class="btn btn-icon" onclick="insertFooter()" title="Insert Footer">_</button>
+                <button class="btn btn-icon" onclick="toggleFindBar()" title="Find">🔍</button>
+            </div>
+
+            <div style="margin-left:auto; display:flex; gap:8px;">
+                <button class="btn btn-icon" onclick="toggleRightSidebar()" title="Toggle Sidebar">◳</button>
+                <span id="save-status" class="text-muted text-sm" style="align-self:center;"></span>
+                <button class="btn btn-primary hidden" id="encrypt-btn" onclick="toggleEncryption()">🔒 Encrypt</button>
+                <button class="btn" onclick="downloadCurrentFile()">⬇️ Export</button>
+            </div>
+        </div>
+
+        <!-- SEARCH BAR -->
+        <div id="find-bar">
+            <input type="text" id="find-input" class="input-text" placeholder="Find text..." onkeyup="handleFindInput(event)" style="width:200px">
+            <button class="btn" onclick="findPrev()">⬆</button>
+            <button class="btn" onclick="findNext()">⬇</button>
+            <span id="find-counts" class="text-muted text-sm" style="min-width: 60px; text-align: center;">0/0</span>
+            <button class="btn btn-icon" onclick="closeFindBar()">✕</button>
+        </div>
+
+        <!-- EDITOR -->
+        <div id="editor-container" onclick="saveSelectionState()">
+            <div id="editor" contenteditable="true" oninput="handleEditorInput()" onmouseup="saveSelectionState()" onkeyup="saveSelectionState()"></div>
+        </div>
+
+        <!-- APP STATUS FOOTER -->
+        <div id="status-bar">
+            <div class="status-item">
+                <span id="status-chars">0 Chars</span>
+                <span style="border-left:1px solid var(--border)"></span>
+                <span id="status-words">0 Words</span>
+            </div>
+            <div class="status-item">
+                <span id="status-size">0 KB</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- RIGHT SIDEBAR (COLLAPSIBLE) -->
+    <div id="right-sidebar" class="sidebar right">
+        <div class="sb-header">
+            <div class="sb-title">Tools</div>
+        </div>
+        <div class="rs-content">
+            <!-- IMAGE OPTIMIZER -->
+            <div class="tool-panel">
+                <label class="tool-label">Image Optimizer</label>
+                <input type="file" id="opt-img-input" accept="image/*" class="input-text" style="height:auto; padding:8px; margin-bottom:10px;">
+                
+                <label class="tool-label">Max Width (px)</label>
+                <input type="number" id="opt-width" class="input-text" value="800" margin-bottom:10px;">
+                
+                <label class="tool-label" style="margin-top:10px">Quality (0-1)</label>
+                <div class="range-wrap">
+                    <input type="range" id="opt-quality" min="0.1" max="1.0" step="0.1" value="0.7">
+                    <span id="opt-qual-val">0.7</span>
+                </div>
+
+                <button class="btn btn-primary" style="width:100%; margin-top:10px;" onclick="processAndInsertImage()">Compress & Insert</button>
+            </div>
+
+            <div class="tool-panel">
+                <label class="tool-label">About</label>
+                <p class="text-muted text-sm">Use the optimizer to reduce file size before inserting into notes.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- HIDDEN INPUTS -->
+<input type="file" id="img-upload-input" accept="image/*" hidden onchange="handleImageFile(this)">
+
+<!-- MODALS -->
+<div id="generic-modal" class="modal-overlay">
+    <div class="modal">
+        <h2 id="modal-title">Title</h2>
+        <div class="modal-body" id="modal-content"></div>
+        <div class="modal-footer" id="modal-actions"></div>
+    </div>
+</div>
+
+<div id="settings-modal" class="modal-overlay">
+    <div class="modal">
+        <h2>Settings</h2>
+        <div class="modal-body">
+            <div class="flex-between">
+                <span>Enable 4-Day History</span>
+                <input type="checkbox" id="setting-history-enabled" onchange="toggleHistorySetting()">
+            </div>
+            <button class="btn" style="width:100%" onclick="downloadHistory()">Download History Log (JSON)</button>
+            
+            <hr style="border:0; border-top:1px solid var(--border)">
+            
+            <div>
+                <div class="flex-between">
+                    <span>IndexedDB Usage</span>
+                    <span id="storage-usage-text" class="text-muted text-sm">Calculating...</span>
+                </div>
+                <div class="progress-bar"><div id="storage-bar" class="progress-fill"></div></div>
+            </div>
+
+            <button class="btn btn-danger" style="width:100%" onclick="clearDatabase()">⚠️ Clear All Data</button>
+        </div>
+        <div class="modal-footer">
+            <button class="btn" onclick="document.getElementById('settings-modal').style.display='none'">Close</button>
+        </div>
+    </div>
+</div>
+
+<script src="./assets/app.js">
+</script>
+</body>
+</html>
