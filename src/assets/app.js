@@ -125,7 +125,105 @@
   const max = args[2] || 1;
   if (max === min) return 0;
   return (value - min) / (max - min);
+},
+'BIN': (args) => {
+  const n = args[0] || 0;
+  return Number(n).toString(2);
+},
+
+'OCT': (args) => {
+  const n = args[0] || 0;
+  return Number(n).toString(8);
+},
+
+'HEX': (args) => {
+  const n = args[0] || 0;
+  return Number(n).toString(16).toUpperCase();
+},
+
+'DEC': (args) => {
+  const n = String(args[0] || 0);
+  const base = args[1] || 10;
+  return parseInt(n, base);
+},
+'DIST': (args) => {
+  const x1 = args[0] || 0;
+  const y1 = args[1] || 0;
+  const x2 = args[2] || 0;
+  const y2 = args[3] || 0;
+  return Math.hypot(x2 - x1, y2 - y1);
+},
+
+'HYPOT': (args) => {
+  const a = args[0] || 0;
+  const b = args[1] || 0;
+  return Math.hypot(a, b);
+},
+
+'CIRCLE_AREA': (args) => {
+  const r = args[0] || 0;
+  return Math.PI * r * r;
+},
+
+'CIRCLE_PERIM': (args) => {
+  const r = args[0] || 0;
+  return 2 * Math.PI * r;
+},
+
+'RECT_AREA': (args) => {
+  const w = args[0] || 0;
+  const h = args[1] || 0;
+  return w * h;
+},
+
+'TRI_AREA': (args) => {
+  const b = args[0] || 0;
+  const h = args[1] || 0;
+  return 0.5 * b * h;
+},
+'Q1': (args) => {
+  if (!args.length) return 0;
+  const n = [...args].sort((a, b) => a - b);
+  const mid = Math.floor(n.length / 2);
+  const lower = n.slice(0, mid);
+  return lower.length % 2
+    ? lower[Math.floor(lower.length / 2)]
+    : (lower[lower.length / 2 - 1] + lower[lower.length / 2]) / 2;
+},
+
+'Q3': (args) => {
+  if (!args.length) return 0;
+  const n = [...args].sort((a, b) => a - b);
+  const mid = Math.ceil(n.length / 2);
+  const upper = n.slice(mid);
+  return upper.length % 2
+    ? upper[Math.floor(upper.length / 2)]
+    : (upper[upper.length / 2 - 1] + upper[upper.length / 2]) / 2;
+},
+
+'IQR': (args) => {
+  if (!args.length) return 0;
+  const n = [...args].sort((a, b) => a - b);
+
+  const q1 = (() => {
+    const lower = n.slice(0, Math.floor(n.length / 2));
+    return lower.length % 2
+      ? lower[Math.floor(lower.length / 2)]
+      : (lower[lower.length / 2 - 1] + lower[lower.length / 2]) / 2;
+  })();
+
+  const q3 = (() => {
+    const upper = n.slice(Math.ceil(n.length / 2));
+    return upper.length % 2
+      ? upper[Math.floor(upper.length / 2)]
+      : (upper[upper.length / 2 - 1] + upper[upper.length / 2]) / 2;
+  })();
+
+  return q3 - q1;
 }
+
+
+
 
 
 
