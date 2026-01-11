@@ -11,6 +11,8 @@ html , based persistent indexeddb note maker
 - Notes encryption with browser's webcrypto api
 - Base 64 encoded image adding capabilities
 - Formulas bar
+- Indexed db based storage
+- Multi database/workspace feature
 
 
 ## Formulas / commands
